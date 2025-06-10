@@ -1,21 +1,21 @@
+# ---------------------------------------------
+# Task Maistro Assistant - Persistencia Railway
+# Arquitectura: Estado temporal en memoria (MemorySaver), datos persistentes en Postgres (PostgresStore)
+# No se usa Redis ni ningún otro checkpointer persistente
+# ---------------------------------------------
+
 import uuid
 import os
 from datetime import datetime
 
 # Core imports with error handling
-
 from pydantic import BaseModel, Field
 from trustcall import create_extractor
 from typing import Literal, Optional, TypedDict
-
 from langchain_core.runnables import RunnableConfig
 from langchain_core.messages import merge_message_runs
 from langchain_core.messages import SystemMessage, HumanMessage
-
-
 from langchain_openai import ChatOpenAI
-
-# Import memory types for different environments with error handling
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.store.memory import InMemoryStore
 try:
@@ -28,16 +28,6 @@ except ImportError:
         print("⚠️ PostgresStore import failed - will use fallback")
 from langgraph.graph import StateGraph, MessagesState, START, END
 from langgraph.store.base import BaseStore
-import redis
-
-# Redis checkpointer import with error handling
-try:
-    from langgraph.checkpoint.redis import RedisCheckpointer
-    REDIS_CHECKPOINTER_AVAILABLE = True
-except ImportError:
-    REDIS_CHECKPOINTER_AVAILABLE = False
-    print("⚠️ Redis checkpointer not available - will use fallback")
-
 import configuration
 
 
@@ -343,38 +333,13 @@ def route_message(state: MessagesState, config: RunnableConfig, store: BaseStore
 ## Memory and Store Configuration
 
 def get_checkpointer():
-    """Get the appropriate checkpointer based on environment"""
-    redis_url = os.getenv("REDIS_URL")
-    
-    if redis_url and REDIS_CHECKPOINTER_AVAILABLE:
-        try:
-            # Test Redis connection first
-            redis_client = redis.from_url(redis_url)
-            redis_client.ping()  # Test connection
-            print("🔴 Using Redis checkpointer for conversation state")
-            
-            # Use actual Redis checkpointer
-            return RedisCheckpointer.from_conn_string(redis_url)
-            
-        except Exception as e:
-            print(f"⚠️ Redis checkpointer failed: {e}")
-            print("💾 Falling back to in-memory checkpointer")
-            return MemorySaver()
-    
-    elif redis_url and not REDIS_CHECKPOINTER_AVAILABLE:
-        print("⚠️ Redis URL found but RedisCheckpointer not available")
-        print("💾 Using in-memory checkpointer")
-        return MemorySaver()
-    
-    else:
-        print("💾 Using in-memory checkpointer (no REDIS_URL found)")
-        return MemorySaver()
+    """Siempre usa MemorySaver para el checkpointer (estado de conversación temporal)"""
+    return MemorySaver()
 
 def get_store():
-    """Get the appropriate store based on environment (PostgreSQL for long-term storage)"""
+    """Usa Postgres como store persistente si DATABASE_URL está presente, si no, usa InMemoryStore"""
     postgres_url = os.getenv("DATABASE_URL")
-    
-    if postgres_url:
+    if postgres_url and PostgresStore is not None:
         try:
             print("🐘 Using PostgreSQL store for persistent data storage")
             return PostgresStore.from_conn_string(postgres_url)
@@ -383,7 +348,7 @@ def get_store():
             print("💾 Falling back to in-memory store")
             return InMemoryStore()
     else:
-        print("💾 Using in-memory store (no DATABASE_URL found)")
+        print("💾 Using in-memory store (no DATABASE_URL found or PostgresStore unavailable)")
         return InMemoryStore()
 
 # Create the graph + all nodes
@@ -403,8 +368,8 @@ builder.add_edge("update_profile", "task_mAIstro")
 builder.add_edge("update_instructions", "task_mAIstro")
 
 # Compile the graph with persistent storage 
-checkpointer = get_checkpointer()  # Redis checkpointer with MemorySaver fallback
-store = get_store()                # PostgreSQL store with InMemoryStore fallback
+checkpointer = get_checkpointer()  # Estado de conversación temporal (MemorySaver)
+store = get_store()                # Datos persistentes en PostgreSQL (o memoria)
 
 graph = builder.compile(checkpointer=checkpointer, store=store)
 
