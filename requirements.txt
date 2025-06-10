@@ -5,7 +5,7 @@ gradio==4.44.0
 python-dotenv==1.0.0
 langchain-core>=0.3.15
 langchain-openai>=0.2.8
-langgraph==0.2.76
+langgraph==0.2.44
 langgraph-prebuilt
 langgraph-sdk
 langgraph-checkpoint-postgres==1.0.0
