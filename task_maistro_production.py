@@ -18,7 +18,7 @@ from langchain_openai import ChatOpenAI
 # Import memory types for different environments with error handling
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.store.memory import InMemoryStore
-from langgraph.store.postgres import PostgresStore  # PostgreSQL store
+from langgraph.store.postgres_store import PostgresStore  # PostgreSQL store
 from langgraph.graph import StateGraph, MessagesState, START, END
 from langgraph.store.base import BaseStore
 import redis
