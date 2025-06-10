@@ -18,7 +18,14 @@ from langchain_openai import ChatOpenAI
 # Import memory types for different environments with error handling
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.store.memory import InMemoryStore
-from langgraph_checkpoint_postgres import PostgresStore  # PostgreSQL store
+try:
+    from langgraph_checkpoint_postgres import PostgresStore
+except ImportError:
+    try:
+        from langgraph_checkpoint_postgres.store import PostgresStore
+    except ImportError:
+        PostgresStore = None
+        print("⚠️ PostgresStore import failed - will use fallback")
 from langgraph.graph import StateGraph, MessagesState, START, END
 from langgraph.store.base import BaseStore
 import redis
