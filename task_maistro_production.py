@@ -18,14 +18,19 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.store.memory import InMemoryStore
+
+
 try:
     from langgraph_checkpoint_postgres import PostgresStore
 except ImportError:
     try:
-        from langgraph_checkpoint_postgres.store import PostgresStore
+        # Fallback para versiones anteriores
+        from langgraph.checkpoint.postgres import PostgresStore
     except ImportError:
         PostgresStore = None
         print("⚠️ PostgresStore import failed - will use fallback")
+
+
 from langgraph.graph import StateGraph, MessagesState, START, END
 from langgraph.store.base import BaseStore
 import configuration
