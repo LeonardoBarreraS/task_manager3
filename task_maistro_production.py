@@ -22,13 +22,10 @@ from langgraph.store.memory import InMemoryStore
 
 # SOLO el Store PostgreSQL (NO checkpointer PostgreSQL)
 try:
-    from langgraph.store.postgres import PostgresStore
+    from langgraph.checkpoint.postgres import PostgresSaver as PostgresStore # Renombrado para tu uso
 except ImportError:
-    try:
-        from langgraph_store_postgres import PostgresStore
-    except ImportError:
-        PostgresStore = None
-        print("⚠️ PostgresStore import failed - will use fallback")
+    PostgresStore = None
+    print("⚠️ PostgresStore import failed - will use fallback")
 
 
 from langgraph.graph import StateGraph, MessagesState, START, END
@@ -347,7 +344,12 @@ def get_store():
     if postgres_url and PostgresStore is not None:
         try:
             print("🐘 Using PostgreSQL store for persistent data storage")
-            return PostgresStore.from_conn_string(postgres_url)
+            store_instance = PostgresStore.from_conn_string(postgres_url)
+            # ¡Importante!: Llama a setup() para crear las tablas si no existen.
+            # Puedes considerar un mecanismo para llamarlo solo la primera vez o
+            # manejar la excepción si las tablas ya existen.
+            store_instance.setup() 
+            return store_instance
         except Exception as e:
             print(f"⚠️ PostgreSQL store failed: {e}")
             print("💾 Falling back to in-memory store")
