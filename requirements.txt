@@ -10,11 +10,11 @@ python-dotenv==1.0.1
 # LangChain core dependencies
 langchain-core==0.3.64
 langchain-openai==0.2.14
-langgraph==0.2.76
+langgraph==0.2.99
 
 # Memory and checkpointing 
 langgraph-checkpoint==2.0.26
-
+langgraph-checkpoint-postgres==0.0.5
 
 # Redis for checkpointers  
 redis>=5.0,<7.0                          # Redis client (compatible version)
