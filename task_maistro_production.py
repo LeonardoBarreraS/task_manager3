@@ -347,30 +347,24 @@ def get_store():
         try:
             print("🐘 Using PostgreSQL store for persistent data storage")
             
-            # PASO CRÍTICO: Usar psycopg2.pool para crear un ConnectionPool
-            # Esto es lo que PostgresSaver espera directamente en su constructor en versiones recientes.
-            # Ajusta minconn y maxconn según tus necesidades de concurrencia.
-            connection_pool = psycopg2.pool.SimpleConnectionPool(minconn=1, maxconn=10, dsn=postgres_url)
+            # OP-1: Usar from_conn_string, que devuelve un context manager
+            # Esto es lo que la librería espera para iniciar una sesión con la DB.
+            # Para el setup, lo abriremos y cerraremos.
+            # Para el grafo, el builder.compile lo manejará internamente.
             
-            # Ahora, obtén una conexión del pool TEMPORALMENTE para llamar a setup()
-            # La instancia de PostgresStore en sí gestionará el pool internamente después.
-            temp_conn = connection_pool.getconn()
-            
-            # Instanciar PostgresStore (que es PostgresSaver) para el setup
-            # Esta instancia temporal se usa solo para crear tablas.
-            setup_store_instance = PostgresStore(connection_pool) # Pasa el pool directamente
-            
-            # Llamar a setup() en la instancia
-            setup_store_instance.setup() 
-            
-            # Es una buena práctica liberar la conexión temporal al pool.
-            connection_pool.putconn(temp_conn)
+            # --- PRIMERO: Asegurarse de que las tablas existan con una instancia temporal ---
+            # Se usa el "with" statement para manejar el context manager de from_conn_string.
+            # Esto crea una conexión temporal para el setup y la cierra al salir del "with".
+            with PostgresStore.from_conn_string(postgres_url) as temp_store:
+                temp_store.setup()
+            print("PostgreSQL store tables created/checked successfully.")
 
-            # Ahora, crea la instancia final del store que se usará en el grafo.
-            # Esta instancia también toma el pool directamente.
-            final_store_instance = PostgresStore(connection_pool)
+            # --- SEGUNDO: Devolver una nueva instancia (o la misma forma) para el grafo ---
+            # La forma más simple y robusta es volver a llamar a from_conn_string,
+            # pero el builder.compile() lo manejará internamente como un context manager.
+            # Aunque devuelve un context manager, langgraph está diseñado para aceptarlo.
+            final_store_instance = PostgresStore.from_conn_string(postgres_url)
             
-            print("PostgreSQL store initialized successfully (tables created/checked).")
             return final_store_instance
         except Exception as e:
             print(f"⚠️ PostgreSQL store failed: {e}")
