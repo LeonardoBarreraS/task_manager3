@@ -7,6 +7,7 @@
 import uuid
 import os
 from datetime import datetime
+import psycopg2
 
 # Core imports with error handling
 from pydantic import BaseModel, Field
@@ -344,7 +345,10 @@ def get_store():
     if postgres_url and PostgresStore is not None:
         try:
             print("🐘 Using PostgreSQL store for persistent data storage")
-            store_instance = PostgresStore(postgres_url) 
+            conn = psycopg2.connect(postgres_url)
+
+
+            store_instance = PostgresStore(sync_connection=conn) 
             # ¡Importante!: Llama a setup() para crear las tablas si no existen.
             # Puedes considerar un mecanismo para llamarlo solo la primera vez o
             # manejar la excepción si las tablas ya existen.
