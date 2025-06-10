@@ -18,7 +18,7 @@ langgraph-checkpoint==2.0.26
 
 # Redis for checkpointers  
 redis==4.5.4                          # Redis client (compatible version)
-langgraph-checkpoint-redis==2.0.2     # Redis checkpointer for LangGraph
+langgraph-checkpoint-redis==0.0.6     # Redis checkpointer for LangGraph
 
 # Database connection
 psycopg2-binary==2.9.9                # PostgreSQL adapter
