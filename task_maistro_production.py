@@ -34,7 +34,7 @@ except ImportError:
 import configuration
 
 
-## Schema definitions
+## Schema definitions##
 
 # User profile schema
 class Profile(BaseModel):
