@@ -344,7 +344,7 @@ def get_store():
     if postgres_url and PostgresStore is not None:
         try:
             print("🐘 Using PostgreSQL store for persistent data storage")
-            store_instance = PostgresStore.from_conn_string(postgres_url)
+            store_instance = PostgresStore(postgres_url) 
             # ¡Importante!: Llama a setup() para crear las tablas si no existen.
             # Puedes considerar un mecanismo para llamarlo solo la primera vez o
             # manejar la excepción si las tablas ya existen.
