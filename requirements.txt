@@ -14,7 +14,7 @@ langgraph==0.2.76
 
 # Memory and checkpointing 
 langgraph-checkpoint==2.0.26
-langgraph-store-postgres==0.0.9       # PostgreSQL store
+
 
 # Redis for checkpointers  
 redis==4.5.4                          # Redis client (compatible version)
