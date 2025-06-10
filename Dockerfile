@@ -36,9 +36,5 @@ USER appuser
 # Expose port (Railway will override with $PORT)
 EXPOSE 8080
 
-# Simple health check for Railway
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:${PORT:-8080}/health || exit 1
-
 # Start application
 CMD ["python", "main.py"]
