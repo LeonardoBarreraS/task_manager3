@@ -20,12 +20,12 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.store.memory import InMemoryStore
 
 
+# SOLO el Store PostgreSQL (NO checkpointer PostgreSQL)
 try:
-    from langgraph_checkpoint_postgres import PostgresStore
+    from langgraph.store.postgres import PostgresStore
 except ImportError:
     try:
-        # Fallback para versiones anteriores
-        from langgraph.checkpoint.postgres import PostgresStore
+        from langgraph_store_postgres import PostgresStore
     except ImportError:
         PostgresStore = None
         print("⚠️ PostgresStore import failed - will use fallback")
