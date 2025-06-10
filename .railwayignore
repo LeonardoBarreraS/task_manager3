@@ -1,0 +1,51 @@
+# Railway ignore file - Task Maistro Simple Version
+
+# Python cache and compiled files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.py[cod]
+*$py.class
+
+# Environment files (Railway will use its own env vars)
+.env
+.env.local
+.env.development
+.env.test
+.env.template
+
+# Logs
+*.log
+
+# Git and development files
+.git/
+.gitignore
+
+# IDE files
+.vscode/
+.idea/
+
+# Documentation and deployment files
+README.md
+deploy-instructions.md
+docker-compose*.yml
+
+# Test and debug files
+test_*.py
+debug_*.py
+*_test.py
+
+# Development scripts
+cleanup-for-deployment.ps1
+
+# Backup files (if any)
+requirements.new.txt
+*.backup
+*.bak
+
+# Virtual environments (not needed in Railway)
+venv/
+env/
+ENV/
+lc-academy-env/

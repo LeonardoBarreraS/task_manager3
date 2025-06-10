@@ -1,0 +1,44 @@
+# Environment files (contains sensitive API keys)
+.env
+.env.local
+.env.development
+.env.test
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environment
+venv/
+env/
+ENV/
+lc-academy-env/
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Local development files
+*.local
+
+# Railway deployment files
+requirements.new.txt
+
+# Debug and test files
+debug_*.py
+test_*.py
+*_test.py
+
+# Documentation (keep in git but exclude from deployments)
+deploy-instructions.md

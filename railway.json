@@ -1,0 +1,13 @@
+{
+  "build": {
+    "builder": "dockerfile"
+  },
+  "deploy": {
+    "restartPolicyType": "always",
+    "healthcheckPath": "/",
+    "healthcheckTimeout": 60,
+    "healthcheckInterval": 30,
+    "startCommand": "python main.py",
+    "replicas": 1
+  }
+}

@@ -1,0 +1,36 @@
+# Task Maistro - Railway Deployment Requirements (Simplified)
+# Only essential dependencies for this simple version
+
+# Core UI dependency
+gradio==4.44.1
+
+# Environment variables
+python-dotenv==1.0.1
+
+# LangChain core dependencies
+langchain-core==0.3.64
+langchain-openai==0.2.14
+langgraph==0.2.76
+
+# Memory and checkpointing 
+langgraph-checkpoint==2.0.26
+langgraph-store-postgres==0.0.9       # PostgreSQL store
+
+# Redis for checkpointers  
+redis==4.5.4                          # Redis client (compatible version)
+langgraph-checkpoint-redis==2.0.2     # Redis checkpointer for LangGraph
+
+# Database connection
+psycopg2-binary==2.9.9                # PostgreSQL adapter
+
+# Trustcall for memory extraction
+trustcall==0.0.39
+
+# Pydantic for schemas
+pydantic==2.10.5
+
+# Essential HTTP client
+httpx==0.27.2
+
+# Security updates
+certifi>=2024.7.4
