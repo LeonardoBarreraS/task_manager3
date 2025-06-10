@@ -175,25 +175,35 @@ def task_mAIstro(state: MessagesState, config: RunnableConfig, store: BaseStore)
     todo_category = configurable.todo_category
     task_maistro_role = configurable.task_maistro_role
 
-   # Retrieve profile memory from the store
-    namespace = ("profile", todo_category, user_id)
-    memories = store.search(namespace)
-    if memories:
-        user_profile = memories[0].value
-    else:
-        user_profile = None
+    user_profile = None
+    todo = ""
+    instructions = ""
 
-    # Retrieve people memory from the store
-    namespace = ("todo", todo_category, user_id)
-    memories = store.search(namespace)
-    todo = "\n".join(f"{mem.value}" for mem in memories)    # Retrieve custom instructions
-    namespace = ("instructions", todo_category, user_id)
-    memories = store.search(namespace)
-    if memories:
-        instructions = memories[0].value
-    else:
-        instructions = ""
+    # Usar 'store' dentro de un 'with' block para acceder a los métodos
+    with store as active_store:
+   # Retrieve profile memory from the store
+        namespace = ("profile", todo_category, user_id)
+        memories = active_store.search(namespace)
+        if memories:
+            user_profile = memories[0].value
+        else:
+            user_profile = None
+
+        # Retrieve people memory from the store
+        namespace = ("todo", todo_category, user_id)
+        memories = active_store.search(namespace)
+        todo = "\n".join(f"{mem.value}" for mem in memories)    # Retrieve custom instructions
+        namespace = ("instructions", todo_category, user_id)
+        memories = active_store.search(namespace)
+        if memories:
+            instructions = memories[0].value
+        else:
+            instructions = ""
     
+
+
+
+
     system_msg = MODEL_SYSTEM_MESSAGE.format(task_maistro_role=task_maistro_role, user_profile=user_profile, todo=todo, instructions=instructions)
 
     # Respond using memory as well as the chat history
@@ -213,29 +223,32 @@ def update_profile(state: MessagesState, config: RunnableConfig, store: BaseStor
     # Define the namespace for the memories
     namespace = ("profile", todo_category, user_id)
 
-    # Retrieve the most recent memories for context
-    existing_items = store.search(namespace)
+    with store as active_store:
 
-    # Format the existing memories for the Trustcall extractor
-    tool_name = "Profile"
-    existing_memories = ([(existing_item.key, tool_name, existing_item.value)
-                          for existing_item in existing_items]
-                          if existing_items
-                          else None
-                        )
+        # Retrieve the most recent memories for context
+        existing_items = active_store.search(namespace)
 
-    # Merge the chat history and the instruction
-    TRUSTCALL_INSTRUCTION_FORMATTED=TRUSTCALL_INSTRUCTION.format(time=datetime.now().isoformat())
-    updated_messages=list(merge_message_runs(messages=[SystemMessage(content=TRUSTCALL_INSTRUCTION_FORMATTED)] + state["messages"][:-1]))    # Invoke the extractor
-    result = profile_extractor.invoke({"messages": updated_messages, 
-                                         "existing": existing_memories})
+        # Format the existing memories for the Trustcall extractor
+        tool_name = "Profile"
+        existing_memories = ([(existing_item.key, tool_name, existing_item.value)
+                            for existing_item in existing_items]
+                            if existing_items
+                            else None
+                            )
 
-    # Save save the memories from Trustcall to the store
-    for r, rmeta in zip(result["responses"], result["response_metadata"]):
-        store.put(namespace,
-                  rmeta.get("json_doc_id", str(uuid.uuid4())),
-                  r.model_dump(mode="json"),
-            )
+        # Merge the chat history and the instruction
+        TRUSTCALL_INSTRUCTION_FORMATTED=TRUSTCALL_INSTRUCTION.format(time=datetime.now().isoformat())
+        updated_messages=list(merge_message_runs(messages=[SystemMessage(content=TRUSTCALL_INSTRUCTION_FORMATTED)] + state["messages"][:-1]))    # Invoke the extractor
+        result = profile_extractor.invoke({"messages": updated_messages, 
+                                            "existing": existing_memories})
+
+        # Save save the memories from Trustcall to the store
+        for r, rmeta in zip(result["responses"], result["response_metadata"]):
+            active_store.put(namespace,
+                    rmeta.get("json_doc_id", str(uuid.uuid4())),
+                    r.model_dump(mode="json"),
+                )
+            
     tool_calls = state['messages'][-1].tool_calls
     # Return tool message with update verification
     return {"messages": [{"role": "tool", "content": "updated profile", "tool_call_id":tool_calls[0]['id']}]}
@@ -252,39 +265,41 @@ def update_todos(state: MessagesState, config: RunnableConfig, store: BaseStore)
     # Define the namespace for the memories
     namespace = ("todo", todo_category, user_id)
 
-    # Retrieve the most recent memories for context
-    existing_items = store.search(namespace)
+    with store as active_store:
 
-    # Format the existing memories for the Trustcall extractor
-    tool_name = "ToDo"
-    existing_memories = ([(existing_item.key, tool_name, existing_item.value)
-                          for existing_item in existing_items]
-                          if existing_items
-                          else None
-                        )
+        # Retrieve the most recent memories for context
+        existing_items = active_store.search(namespace)
 
-    # Merge the chat history and the instruction
-    TRUSTCALL_INSTRUCTION_FORMATTED=TRUSTCALL_INSTRUCTION.format(time=datetime.now().isoformat())
-    updated_messages=list(merge_message_runs(messages=[SystemMessage(content=TRUSTCALL_INSTRUCTION_FORMATTED)] + state["messages"][:-1]))
+        # Format the existing memories for the Trustcall extractor
+        tool_name = "ToDo"
+        existing_memories = ([(existing_item.key, tool_name, existing_item.value)
+                            for existing_item in existing_items]
+                            if existing_items
+                            else None
+                            )
 
-      # Create the Trustcall extractor for updating the ToDo list 
-    todo_extractor = create_extractor(
-        model,
-        tools=[ToDo],
-        tool_choice=tool_name,
-        enable_inserts=True
-    )
+        # Merge the chat history and the instruction
+        TRUSTCALL_INSTRUCTION_FORMATTED=TRUSTCALL_INSTRUCTION.format(time=datetime.now().isoformat())
+        updated_messages=list(merge_message_runs(messages=[SystemMessage(content=TRUSTCALL_INSTRUCTION_FORMATTED)] + state["messages"][:-1]))
 
-    # Invoke the extractor
-    result = todo_extractor.invoke({"messages": updated_messages, 
-                                         "existing": existing_memories})
+        # Create the Trustcall extractor for updating the ToDo list 
+        todo_extractor = create_extractor(
+            model,
+            tools=[ToDo],
+            tool_choice=tool_name,
+            enable_inserts=True
+        )
 
-    # Save save the memories from Trustcall to the store
-    for r, rmeta in zip(result["responses"], result["response_metadata"]):
-        store.put(namespace,
-                  rmeta.get("json_doc_id", str(uuid.uuid4())),
-                  r.model_dump(mode="json"),
-            )
+        # Invoke the extractor
+        result = todo_extractor.invoke({"messages": updated_messages, 
+                                            "existing": existing_memories})
+
+        # Save save the memories from Trustcall to the store
+        for r, rmeta in zip(result["responses"], result["response_metadata"]):
+            active_store.put(namespace,
+                    rmeta.get("json_doc_id", str(uuid.uuid4())),
+                    r.model_dump(mode="json"),
+                )
         
     # Respond to the tool call made in task_mAIstro, confirming the update    
     tool_calls = state['messages'][-1].tool_calls
@@ -304,14 +319,18 @@ def update_instructions(state: MessagesState, config: RunnableConfig, store: Bas
     
     namespace = ("instructions", todo_category, user_id)
 
-    existing_memory = store.get(namespace, "user_instructions")
-          # Format the memory in the system prompt
-    system_msg = CREATE_INSTRUCTIONS.format(current_instructions=existing_memory.value if existing_memory else None)
-    new_memory = model.invoke([SystemMessage(content=system_msg)]+state['messages'][:-1] + [HumanMessage(content="Please update the instructions based on the conversation")])
+    with store as active_store:
 
-    # Overwrite the existing memory in the store 
-    key = "user_instructions"
-    store.put(namespace, key, {"memory": new_memory.content})
+        existing_memory = active_store.get(namespace, "user_instructions")
+            # Format the memory in the system prompt
+        system_msg = CREATE_INSTRUCTIONS.format(current_instructions=existing_memory.value if existing_memory else None)
+        new_memory = model.invoke([SystemMessage(content=system_msg)]+state['messages'][:-1] + [HumanMessage(content="Please update the instructions based on the conversation")])
+
+        # Overwrite the existing memory in the store 
+        key = "user_instructions"
+        active_store.put(namespace, key, {"memory": new_memory.content})
+
+
     tool_calls = state['messages'][-1].tool_calls
     # Return tool message with update verification
     return {"messages": [{"role": "tool", "content": "updated instructions", "tool_call_id":tool_calls[0]['id']}]}
