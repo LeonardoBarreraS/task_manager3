@@ -8,6 +8,7 @@ import uuid
 import os
 from datetime import datetime
 import psycopg2
+import psycopg2.pool # Necesario para el ConnectionPool
 
 # Core imports with error handling
 from pydantic import BaseModel, Field
@@ -345,15 +346,32 @@ def get_store():
     if postgres_url and PostgresStore is not None:
         try:
             print("🐘 Using PostgreSQL store for persistent data storage")
-            conn = psycopg2.connect(postgres_url)
+            
+            # PASO CRÍTICO: Usar psycopg2.pool para crear un ConnectionPool
+            # Esto es lo que PostgresSaver espera directamente en su constructor en versiones recientes.
+            # Ajusta minconn y maxconn según tus necesidades de concurrencia.
+            connection_pool = psycopg2.pool.SimpleConnectionPool(minconn=1, maxconn=10, dsn=postgres_url)
+            
+            # Ahora, obtén una conexión del pool TEMPORALMENTE para llamar a setup()
+            # La instancia de PostgresStore en sí gestionará el pool internamente después.
+            temp_conn = connection_pool.getconn()
+            
+            # Instanciar PostgresStore (que es PostgresSaver) para el setup
+            # Esta instancia temporal se usa solo para crear tablas.
+            setup_store_instance = PostgresStore(connection_pool) # Pasa el pool directamente
+            
+            # Llamar a setup() en la instancia
+            setup_store_instance.setup() 
+            
+            # Es una buena práctica liberar la conexión temporal al pool.
+            connection_pool.putconn(temp_conn)
 
-
-            store_instance = PostgresStore(sync_connection=conn) 
-            # ¡Importante!: Llama a setup() para crear las tablas si no existen.
-            # Puedes considerar un mecanismo para llamarlo solo la primera vez o
-            # manejar la excepción si las tablas ya existen.
-            store_instance.setup() 
-            return store_instance
+            # Ahora, crea la instancia final del store que se usará en el grafo.
+            # Esta instancia también toma el pool directamente.
+            final_store_instance = PostgresStore(connection_pool)
+            
+            print("PostgreSQL store initialized successfully (tables created/checked).")
+            return final_store_instance
         except Exception as e:
             print(f"⚠️ PostgreSQL store failed: {e}")
             print("💾 Falling back to in-memory store")
