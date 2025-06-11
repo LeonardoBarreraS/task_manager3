@@ -5,8 +5,8 @@ gradio==4.44.0
 python-dotenv==1.0.0
 langchain-core>=0.3.0
 langchain-openai>=0.2.8
-langgraph>=0.2.50  # Ya no necesitamos [redis] aquí
-redis             # Instalación explícita y separada de la librería 'redis'
+langgraph[redis]>=0.2.50  # Necesario para habilitar RedisCheckpoint y RedisStore
+redis                     # Redundante pero aceptable si ya está instalado por otras razones
 langgraph-prebuilt
 langgraph-sdk
 langsmith
