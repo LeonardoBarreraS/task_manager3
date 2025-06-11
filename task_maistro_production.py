@@ -19,7 +19,7 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.messages import merge_message_runs
 from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_openai import ChatOpenAI
-# from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import MemorySaver
 # from langgraph.store.memory import InMemoryStore
 
 from langgraph.checkpoint.sqlite import SqliteSaver
@@ -461,7 +461,15 @@ builder.add_edge("update_instructions", "task_mAIstro")
 
 REDIS_URI = os.getenv("REDIS_URI")
 
-checkpointer_ctx = SqliteSaver.from_conn_string("sqlite:////tmp/state.db")
+def get_checkpointer():
+    """Get the appropriate checkpointer based on environment"""
+    #redis_url = os.getenv("REDIS_URL")
+    
+    # Always use MemorySaver for now to avoid compatibility issues
+    print("💾 Using in-memory checkpointer (stable)")
+    return MemorySaver()
+
+checkpointer_ctx = nullcontext(get_checkpointer())
 store_ctx = RedisStore.from_conn_string(REDIS_URI) if REDIS_URI else nullcontext()
 
 with checkpointer_ctx as checkpointer, store_ctx as store:
