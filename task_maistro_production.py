@@ -18,12 +18,11 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.messages import merge_message_runs
 from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_openai import ChatOpenAI
-from langgraph.checkpoint.memory import MemorySaver
-from langgraph.store.memory import InMemoryStore
+# from langgraph.checkpoint.memory import MemorySaver
+# from langgraph.store.memory import InMemoryStore
 
 
-
-from langgraph.checkpoint.redis import RedisCheckpoint
+from langgraph.checkpoint.redis import RedisSaver
 from langgraph.store.redis import RedisStore
 
 
@@ -279,7 +278,8 @@ def update_profile(state: MessagesState, config: RunnableConfig, store: BaseStor
 
         # Save save the memories from Trustcall to the store
         for r, rmeta in zip(result["responses"], result["response_metadata"]):
-            active_store.put(namespace, user_id, r.model_dump(mode="json"))
+            profile_field = rmeta.get("json_doc_id", str(uuid.uuid4()))
+            active_store.put(namespace, profile_field, r.model_dump(mode="json"))
 
 
     tool_calls = state['messages'][-1].tool_calls
@@ -414,32 +414,34 @@ def route_message(state: MessagesState, config: RunnableConfig, store: BaseStore
 #######################################################################################################################################3
 ## Memory and Store Configuration
 
-def get_checkpointer():
-    """Usa RedisCheckpoint para el checkpointer (estado de conversación temporal del grafo)"""
-    redis_url = os.getenv("REDIS_URI") # Usaremos la variable de entorno REDIS_URI
+# def get_checkpointer():
+#     """Usa RedisCheckpoint para el checkpointer (estado de conversación temporal del grafo)"""
+#     redis_url = os.getenv("REDIS_URI") # Usaremos la variable de entorno REDIS_URI
 
 
-    if redis_url:
-        print(f"🔴 Using Redis as checkpointer: {redis_url}")
-        return RedisCheckpoint(url=redis_url)
-    else:
-        print("⚠️ REDIS_URI no está configurado. Usando MemorySaver para checkpointer.")
-        return MemorySaver() # Fallback si no hay Redis URI
+#     if redis_url:
+#         print(f"🔴 Using Redis as checkpointer: {redis_url}")
+#         return RedisCheckpoint(url=redis_url)
+#     else:
+#         print("⚠️ REDIS_URI no está configurado. Usando MemorySaver para checkpointer.")
+#         return MemorySaver() # Fallback si no hay Redis URI
 
-##################################################################################################################
+# ##################################################################################################################
 
-def get_store():
+# def get_store():
     
-    redis_url = os.getenv("REDIS_URI") # Mismo REDIS_URI que para el checkpointer
+#     redis_url = os.getenv("REDIS_URI") # Mismo REDIS_URI que para el checkpointer
 
-    if redis_url:
-        print(f"📦 Using RedisStore for custom data persistence: {redis_url}")
-        return RedisStore(url=redis_url)
-    else:
-        print("⚠️ REDIS_URI no está configurado. Usando InMemoryStore para datos personalizados.")
-        return InMemoryStore() 
+#     if redis_url:
+#         print(f"📦 Using RedisStore for custom data persistence: {redis_url}")
+#         return RedisStore(url=redis_url)
+#     else:
+#         print("⚠️ REDIS_URI no está configurado. Usando InMemoryStore para datos personalizados.")
+#         return InMemoryStore() 
 
 #######################################################################################################
+
+
 
 # Create the graph + all nodes
 builder = StateGraph(MessagesState, config_schema=configuration.Configuration)
@@ -457,11 +459,15 @@ builder.add_edge("update_todos", "task_mAIstro")
 builder.add_edge("update_profile", "task_mAIstro")
 builder.add_edge("update_instructions", "task_mAIstro")
 
-# Compile the graph with persistent storage 
-checkpointer = get_checkpointer()  # Estado de conversación temporal (MemorySaver)
-store = get_store()                # Datos persistentes en PostgreSQL (o memoria)
+REDIS_URI = os.getenv("REDIS_URI", "redis://localhost:6379/0")
 
-graph = builder.compile(checkpointer=checkpointer, store=store)
+with RedisSaver.from_conn_string(REDIS_URI) as checkpointer:
+    checkpointer.setup()
+
+    with RedisStore.from_conn_string(REDIS_URI) as store:
+        store.setup()
+        graph = builder.compile(checkpointer=checkpointer, store=store)
+        
 
 # Export graph for use in other modules
 __all__ = ["graph"]
