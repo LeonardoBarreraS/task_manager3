@@ -25,6 +25,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.store.redis import RedisStore
 
+from redis import Redis
 
 
 
@@ -465,8 +466,9 @@ REDIS_URI = os.getenv("REDIS_URI")
 checkpointer = MemorySaver()
 
 # Crear el store (Redis), directamente como objeto
-store = RedisStore.from_conn_string(REDIS_URI, index_name="store") if REDIS_URI else None
-
+#store = RedisStore.from_conn_string(REDIS_URI, index_name="store") if REDIS_URI else None
+redis_client = Redis.from_url(REDIS_URI)
+store = RedisStore(redis_client, index_name="store") 
 # Compilar el grafo sin usar with para objetos que no son context manager
 graph = builder.compile(checkpointer=checkpointer, store=store)
 
