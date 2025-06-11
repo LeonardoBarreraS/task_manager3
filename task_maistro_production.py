@@ -8,6 +8,7 @@ import uuid
 import os
 from datetime import datetime
 import json
+from contextlib import nullcontext
 
 
 # Core imports with error handling
@@ -460,11 +461,11 @@ builder.add_edge("update_instructions", "task_mAIstro")
 
 REDIS_URI = os.getenv("REDIS_URI")
 
-checkpointer = SqliteSaver.from_conn_string("sqlite:///state.db")
-store = RedisStore.from_conn_string(REDIS_URI)
+checkpointer_ctx = SqliteSaver.from_conn_string("sqlite:///state.db")
+store_ctx = RedisStore.from_conn_string(REDIS_URI) if REDIS_URI else nullcontext()
 
-graph = builder.compile(checkpointer=checkpointer, store=store)
-        
+with checkpointer_ctx as checkpointer, store_ctx as store:
+    graph = builder.compile(checkpointer=checkpointer, store=store)
 
-# Export graph for use in other modules
-__all__ = ["graph"]
+    # Export graph for use in other modules
+    __all__ = ["graph"]
