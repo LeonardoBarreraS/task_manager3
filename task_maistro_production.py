@@ -461,19 +461,13 @@ builder.add_edge("update_instructions", "task_mAIstro")
 
 REDIS_URI = os.getenv("REDIS_URI")
 
-def get_checkpointer():
-    """Get the appropriate checkpointer based on environment"""
-    #redis_url = os.getenv("REDIS_URL")
-    
-    # Always use MemorySaver for now to avoid compatibility issues
-    print("💾 Using in-memory checkpointer (stable)")
-    return MemorySaver()
+# Crear el checkpointer (en memoria, sin contexto)
+checkpointer = MemorySaver()
 
-checkpointer_ctx = nullcontext(get_checkpointer())
-store_ctx = RedisStore.from_conn_string(REDIS_URI) if REDIS_URI else nullcontext()
+# Crear el store (Redis), directamente como objeto
+store = RedisStore.from_conn_string(REDIS_URI) if REDIS_URI else None
 
-with checkpointer_ctx as checkpointer, store_ctx as store:
-    graph = builder.compile(checkpointer=checkpointer, store=store)
+# Compilar el grafo sin usar with para objetos que no son context manager
+graph = builder.compile(checkpointer=checkpointer, store=store)
 
-    # Export graph for use in other modules
-    __all__ = ["graph"]
+__all__ = ["graph"]
