@@ -460,17 +460,17 @@ builder.add_edge("update_instructions", "task_mAIstro")
 
 REDIS_URI = os.getenv("REDIS_URI")
 
-# Crear el checkpointer (en memoria, sin contexto)
-#checkpointer = MemorySaver()
+## Crear el checkpointer (en memoria, sin contexto)
+# checkpointer = MemorySaver()
 
-# with RedisSaver.from_conn_string(REDIS_URI) as checkpointer:
-#     checkpointer.setup()
+with RedisSaver.from_conn_string(REDIS_URI) as checkpointer:
+    checkpointer.setup()
     
-#     with RedisStore.from_conn_string(REDIS_URI) as store:
-#         store.setup()
+    with RedisStore.from_conn_string(REDIS_URI) as store:
+        store.setup()
         
-#         # Compile graph with both checkpointer and store
-#         graph = builder.compile(checkpointer=checkpointer, store=store)
+        # Compile graph with both checkpointer and store
+        graph = builder.compile(checkpointer=checkpointer, store=store)
 
 # # Crear el store (Redis), directamente como objeto
 # store = RedisStore.from_conn_string(REDIS_URI) if REDIS_URI else None
@@ -478,14 +478,7 @@ REDIS_URI = os.getenv("REDIS_URI")
 # # Compilar el grafo sin usar with para objetos que no son context manager
 # graph = builder.compile(checkpointer=checkpointer, store=store)
 
-checkpointer = RedisSaver.from_conn_string(REDIS_URI)
-checkpointer.setup()
 
-store = RedisStore.from_conn_string(REDIS_URI)
-store.setup()
-
-# Compilar el grafo con ambos
-graph = builder.compile(checkpointer=checkpointer, store=store)
 
 __all__ = ["graph"]
 
