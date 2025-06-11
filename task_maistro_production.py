@@ -19,18 +19,16 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.messages import merge_message_runs
 from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_openai import ChatOpenAI
-from langgraph.checkpoint.memory import MemorySaver
+#from langgraph.checkpoint.memory import MemorySaver
 # from langgraph.store.memory import InMemoryStore
 
-from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.store.redis import RedisStore
-
-from redis import Redis
-
+from langgraph.checkpoint.redis import RedisSaver
+from langgraph.store.base import BaseStore
 
 
 from langgraph.graph import StateGraph, MessagesState, START, END
-from langgraph.store.base import BaseStore
+
 import configuration
 
 
@@ -463,12 +461,32 @@ builder.add_edge("update_instructions", "task_mAIstro")
 REDIS_URI = os.getenv("REDIS_URI")
 
 # Crear el checkpointer (en memoria, sin contexto)
-checkpointer = MemorySaver()
+#checkpointer = MemorySaver()
 
-# Crear el store (Redis), directamente como objeto
-store = RedisStore.from_conn_string(REDIS_URI) if REDIS_URI else None
+# with RedisSaver.from_conn_string(REDIS_URI) as checkpointer:
+#     checkpointer.setup()
+    
+#     with RedisStore.from_conn_string(REDIS_URI) as store:
+#         store.setup()
+        
+#         # Compile graph with both checkpointer and store
+#         graph = builder.compile(checkpointer=checkpointer, store=store)
 
-# Compilar el grafo sin usar with para objetos que no son context manager
+# # Crear el store (Redis), directamente como objeto
+# store = RedisStore.from_conn_string(REDIS_URI) if REDIS_URI else None
+
+# # Compilar el grafo sin usar with para objetos que no son context manager
+# graph = builder.compile(checkpointer=checkpointer, store=store)
+
+checkpointer = RedisSaver.from_conn_string(REDIS_URI)
+checkpointer.setup()
+
+store = RedisStore.from_conn_string(REDIS_URI)
+store.setup()
+
+# Compilar el grafo con ambos
 graph = builder.compile(checkpointer=checkpointer, store=store)
 
 __all__ = ["graph"]
+
+
