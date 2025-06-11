@@ -467,7 +467,7 @@ with RedisSaver.from_conn_string(REDIS_URI) as checkpointer:
     checkpointer.setup()
     
     store = RedisStore.from_conn_string(REDIS_URI)
-    store.setup()
+    
         
     # Compile graph with both checkpointer and store
     graph = builder.compile(checkpointer=checkpointer, store=store)
