@@ -21,8 +21,7 @@ from langchain_openai import ChatOpenAI
 # from langgraph.checkpoint.memory import MemorySaver
 # from langgraph.store.memory import InMemoryStore
 
-
-from langgraph.checkpoint.redis import RedisSaver
+from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.store.redis import RedisStore
 
 
@@ -459,14 +458,12 @@ builder.add_edge("update_todos", "task_mAIstro")
 builder.add_edge("update_profile", "task_mAIstro")
 builder.add_edge("update_instructions", "task_mAIstro")
 
-REDIS_URI = os.getenv("REDIS_URI", "redis://localhost:6379/0")
+REDIS_URI = os.getenv("REDIS_URI")
 
-with RedisSaver.from_conn_string(REDIS_URI) as checkpointer:
-    checkpointer.setup()
+checkpointer = SqliteSaver.from_conn_string("sqlite:///state.db")
+store = RedisStore.from_conn_string(REDIS_URI)
 
-    with RedisStore.from_conn_string(REDIS_URI) as store:
-        store.setup()
-        graph = builder.compile(checkpointer=checkpointer, store=store)
+graph = builder.compile(checkpointer=checkpointer, store=store)
         
 
 # Export graph for use in other modules
