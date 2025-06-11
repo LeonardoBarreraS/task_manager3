@@ -1,19 +1,15 @@
 # Task Maistro - Railway Deployment Requirements (solo Postgres persistente, sin Redis)
 # Solo dependencias esenciales para producción Railway
-
 gradio==4.44.0
 python-dotenv==1.0.0
 langchain-core>=0.3.0
 langchain-openai>=0.2.8
-langgraph[redis]>=0.2.50  # Necesario para habilitar RedisCheckpoint y RedisStore
-redis                     # Redundante pero aceptable si ya está instalado por otras razones
+langgraph==0.4.7
 langgraph-prebuilt
 langgraph-sdk
-langsmith
-langchain-community
+langgraph-checkpoint-redis
+redis>=6.0.0
 trustcall==0.0.20
 pydantic==2.9.2
 httpx==0.27.2
 typing-extensions==4.12.2
-
-
