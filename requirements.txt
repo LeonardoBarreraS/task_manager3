@@ -2,19 +2,13 @@
 
 gradio==4.44.0
 python-dotenv==1.0.0
-
-# LangGraph ecosystem (versiones compatibles entre sí)
+langchain-core>=0.3.0
+langchain-openai>=0.2.8
 langgraph==0.4.7
 langgraph-prebuilt
 langgraph-sdk
 langgraph-checkpoint-redis
-redisvl==0.1.2           # 🔥 Necesario para que RedisSaver/Store funcionen como context managers
-
-# LangChain base
-langchain-core>=0.3.0
-langchain-openai>=0.2.8
-
-# Otros
+redis>=6.0.0
 trustcall==0.0.20
 pydantic==2.9.2
 httpx==0.27.2
