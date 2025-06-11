@@ -24,6 +24,7 @@
 from redis.commands.search import Search
 import os
 from dotenv import load_dotenv
+from redis import Redis
 
 # Load environment variables
 load_dotenv()
