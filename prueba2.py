@@ -37,5 +37,7 @@ with RedisSaver.from_conn_string(REDIS_URI) as checkpointer:
     graph = create_react_agent(model, tools=tools, checkpointer=checkpointer)
     
     # Use the agent with a specific thread ID to maintain conversation state
-    config = {"configurable": {"thread_id": "user123"}}
-    res = graph.invoke({"messages": [("human", "what's the weather in sf")]}, config)
+    config = {"configurable": {"thread_id": "user122"}}
+    res = graph.invoke({"messages": [("human", "what's the weather in nyc")]}, config)
+
+    print(res["messages"][-1].content)  # Output: It's always sunny in sf
