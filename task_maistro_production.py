@@ -461,7 +461,7 @@ builder.add_edge("update_instructions", "task_mAIstro")
 
 REDIS_URI = os.getenv("REDIS_URI")
 
-checkpointer_ctx = SqliteSaver.from_conn_string("sqlite:///state.db")
+checkpointer_ctx = SqliteSaver.from_conn_string("sqlite:////tmp/state.db")
 store_ctx = RedisStore.from_conn_string(REDIS_URI) if REDIS_URI else nullcontext()
 
 with checkpointer_ctx as checkpointer, store_ctx as store:
