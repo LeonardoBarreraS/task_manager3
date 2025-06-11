@@ -21,7 +21,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+RUN pip install --no-cache-dir redis
 RUN pip install --no-cache-dir -r requirements.txt
+
+RUN pip list
 
 COPY main.py .
 COPY task_maistro_production.py .
