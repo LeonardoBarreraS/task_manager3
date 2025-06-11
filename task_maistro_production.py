@@ -466,11 +466,11 @@ REDIS_URI = os.getenv("REDIS_URI")
 with RedisSaver.from_conn_string(REDIS_URI) as checkpointer:
     checkpointer.setup()
     
-    with RedisStore.from_conn_string(REDIS_URI) as store:
-        store.setup()
+    store = RedisStore.from_conn_string(REDIS_URI)
+    store.setup()
         
-        # Compile graph with both checkpointer and store
-        graph = builder.compile(checkpointer=checkpointer, store=store)
+    # Compile graph with both checkpointer and store
+    graph = builder.compile(checkpointer=checkpointer, store=store)
 
 # # Crear el store (Redis), directamente como objeto
 # store = RedisStore.from_conn_string(REDIS_URI) if REDIS_URI else None
