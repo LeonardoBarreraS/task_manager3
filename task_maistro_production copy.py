@@ -9,6 +9,7 @@ import uuid
 import os
 from datetime import datetime
 import json
+from contextlib import nullcontext
 
 
 # Core imports with error handling
@@ -184,47 +185,49 @@ def task_mAIstro(state: MessagesState, config: RunnableConfig, store: BaseStore)
     instructions = ""
 
 #############################################################################
+    # Usar 'store' dentro de un 'with' block para acceder a los métodos
+    with store as active_store:
+   # Retrieve profile memory from the store
+        namespace = ("profile", todo_category, user_id)
+        memories = active_store.search(namespace)
 
-    namespace = ("profile", todo_category, user_id)
-    memories = store.search(namespace)
-
-    if memories:
-        profile_data = memories[0].value
-        if isinstance(profile_data, str): # Si se serializó como cadena, deserealizar
-            profile_data = json.loads(profile_data)
-        user_profile = Profile.model_validate(profile_data).model_dump_json(indent=2)
-    else:
-        user_profile = None
+        if memories:
+            profile_data = memories[0].value
+            if isinstance(profile_data, str): # Si se serializó como cadena, deserealizar
+                profile_data = json.loads(profile_data)
+            user_profile = Profile.model_validate(profile_data).model_dump_json(indent=2)
+        else:
+            user_profile = None
 ##################################################################################
 
-    # Retrieve people memory from the store
-    namespace = ("todo", todo_category, user_id)
-    memories = store.search(namespace)
+        # Retrieve people memory from the store
+        namespace = ("todo", todo_category, user_id)
+        memories = active_store.search(namespace)
+    
 
-
-    todo_list_formatted = []
-    if memories:
-        for mem in memories:
-            todo_data = mem.value
-            if isinstance(todo_data, str):
-                todo_data = json.loads(todo_data)
-            todo_list_formatted.append(json.dumps(todo_data))
-    todo = "\n".join(todo_list_formatted)
+        todo_list_formatted = []
+        if memories:
+            for mem in memories:
+                todo_data = mem.value
+                if isinstance(todo_data, str):
+                    todo_data = json.loads(todo_data)
+                todo_list_formatted.append(json.dumps(todo_data))
+        todo = "\n".join(todo_list_formatted)
 
 ##################################################################################
 
           # Retrieve custom instructions
-    namespace = ("instructions", todo_category, user_id)
-    memories = store.search(namespace)
-    if memories:
-        instructions_data = memories[0].value
-        if isinstance(instructions_data, str):
-            # Las instrucciones pueden ser una cadena simple
-            instructions = instructions_data
-        else: # Si se guardó como JSON, convertir a cadena.
-            instructions = json.dumps(instructions_data)
-    else:
-        instructions = ""
+        namespace = ("instructions", todo_category, user_id)
+        memories = active_store.search(namespace)
+        if memories:
+            instructions_data = memories[0].value
+            if isinstance(instructions_data, str):
+                # Las instrucciones pueden ser una cadena simple
+                instructions = instructions_data
+            else: # Si se guardó como JSON, convertir a cadena.
+                instructions = json.dumps(instructions_data)
+        else:
+            instructions = ""
 
 ##############################################################################
 
@@ -234,6 +237,9 @@ def task_mAIstro(state: MessagesState, config: RunnableConfig, store: BaseStore)
     response = model.bind_tools([UpdateMemory], parallel_tool_calls=False).invoke([SystemMessage(content=system_msg)]+state["messages"])
 
     return {"messages": [response]}
+
+
+
 
 ########################################################################################################################################
 
@@ -250,30 +256,33 @@ def update_profile(state: MessagesState, config: RunnableConfig, store: BaseStor
 
 ######################################################################
  
-    # Retrieve the most recent memories for context
-    existing_items = store.search(namespace)
 
-    # Format the existing memories for the Trustcall extractor
-    tool_name = "Profile"
-    existing_memories = ([(existing_item.key, tool_name, json.loads(existing_item.value) if isinstance(existing_item.value, str) else existing_item.value)
-                        for existing_item in existing_items]
-                        if existing_items
-                        else None
-                        )
+    with store as active_store:
+
+        # Retrieve the most recent memories for context
+        existing_items = active_store.search(namespace)
+
+        # Format the existing memories for the Trustcall extractor
+        tool_name = "Profile"
+        existing_memories = ([(existing_item.key, tool_name, json.loads(existing_item.value) if isinstance(existing_item.value, str) else existing_item.value)
+                            for existing_item in existing_items]
+                            if existing_items
+                            else None
+                            )
 
 ################################################################################
         # Merge the chat history and the instruction
-    TRUSTCALL_INSTRUCTION_FORMATTED=TRUSTCALL_INSTRUCTION.format(time=datetime.now().isoformat())
-    updated_messages=list(merge_message_runs(messages=[SystemMessage(content=TRUSTCALL_INSTRUCTION_FORMATTED)] + state["messages"][:-1]))    # Invoke the extractor
-    result = profile_extractor.invoke({"messages": updated_messages, 
-                                        "existing": existing_memories})
+        TRUSTCALL_INSTRUCTION_FORMATTED=TRUSTCALL_INSTRUCTION.format(time=datetime.now().isoformat())
+        updated_messages=list(merge_message_runs(messages=[SystemMessage(content=TRUSTCALL_INSTRUCTION_FORMATTED)] + state["messages"][:-1]))    # Invoke the extractor
+        result = profile_extractor.invoke({"messages": updated_messages, 
+                                            "existing": existing_memories})
 
 ##################################################################################
 
-    # Save save the memories from Trustcall to the store
-    for r, rmeta in zip(result["responses"], result["response_metadata"]):
-        profile_field = rmeta.get("json_doc_id", str(uuid.uuid4()))
-        store.put(namespace, profile_field, r.model_dump(mode="json"))
+        # Save save the memories from Trustcall to the store
+        for r, rmeta in zip(result["responses"], result["response_metadata"]):
+            profile_field = rmeta.get("json_doc_id", str(uuid.uuid4()))
+            active_store.put(namespace, profile_field, r.model_dump(mode="json"))
 
 
     tool_calls = state['messages'][-1].tool_calls
@@ -284,6 +293,7 @@ def update_profile(state: MessagesState, config: RunnableConfig, store: BaseStor
 
 def update_todos(state: MessagesState, config: RunnableConfig, store: BaseStore):
 
+    """Reflect on the chat history and update the memory collection."""
     
     # Get the user ID from the config
     configurable = configuration.Configuration.from_runnable_config(config)
@@ -296,41 +306,43 @@ def update_todos(state: MessagesState, config: RunnableConfig, store: BaseStore)
 
 ##################################################################################
 
-    # Retrieve the most recent memories for context
-    existing_items = store.search(namespace)
+    with store as active_store:
 
-    # Format the existing memories for the Trustcall extractor
-    tool_name = "ToDo"
-    existing_memories = ([(existing_item.key, tool_name, json.loads(existing_item.value) if isinstance(existing_item.value, str) else existing_item.value)
-                        for existing_item in existing_items]
-                        if existing_items
-                        else None
-                        )
-    
+        # Retrieve the most recent memories for context
+        existing_items = active_store.search(namespace)
+
+        # Format the existing memories for the Trustcall extractor
+        tool_name = "ToDo"
+        existing_memories = ([(existing_item.key, tool_name, json.loads(existing_item.value) if isinstance(existing_item.value, str) else existing_item.value)
+                            for existing_item in existing_items]
+                            if existing_items
+                            else None
+                            )
+        
 ##################################################################################
         # Merge the chat history and the instruction
-    TRUSTCALL_INSTRUCTION_FORMATTED=TRUSTCALL_INSTRUCTION.format(time=datetime.now().isoformat())
-    updated_messages=list(merge_message_runs(messages=[SystemMessage(content=TRUSTCALL_INSTRUCTION_FORMATTED)] + state["messages"][:-1]))
+        TRUSTCALL_INSTRUCTION_FORMATTED=TRUSTCALL_INSTRUCTION.format(time=datetime.now().isoformat())
+        updated_messages=list(merge_message_runs(messages=[SystemMessage(content=TRUSTCALL_INSTRUCTION_FORMATTED)] + state["messages"][:-1]))
 
-    # Create the Trustcall extractor for updating the ToDo list 
-    todo_extractor = create_extractor(
-        model,
-        tools=[ToDo],
-        tool_choice=tool_name,
-        enable_inserts=True
-    )
+        # Create the Trustcall extractor for updating the ToDo list 
+        todo_extractor = create_extractor(
+            model,
+            tools=[ToDo],
+            tool_choice=tool_name,
+            enable_inserts=True
+        )
 
-    # Invoke the extractor
-    result = todo_extractor.invoke({"messages": updated_messages, 
-                                        "existing": existing_memories})
+        # Invoke the extractor
+        result = todo_extractor.invoke({"messages": updated_messages, 
+                                            "existing": existing_memories})
 
 
 ############################################################################################
 
-    # Save save the memories from Trustcall to the store
-    for r, rmeta in zip(result["responses"], result["response_metadata"]):
-        todo_id = rmeta.get("json_doc_id", str(uuid.uuid4()))
-        store.put(namespace, todo_id, r.model_dump(mode="json")) 
+        # Save save the memories from Trustcall to the store
+        for r, rmeta in zip(result["responses"], result["response_metadata"]):
+            todo_id = rmeta.get("json_doc_id", str(uuid.uuid4()))
+            active_store.put(namespace, todo_id, r.model_dump(mode="json")) 
 
     ################################################################################################# 
 
@@ -355,28 +367,27 @@ def update_instructions(state: MessagesState, config: RunnableConfig, store: Bas
 
 ############################################################################################################3
 
+    with store as active_store:
 
-    existing_memory_item = store.get(namespace, "user_instructions")
-    existing_instructions = existing_memory_item.value if existing_memory_item else None
-    if existing_instructions and isinstance(existing_instructions, str):
-        try:
+        existing_memory_item = active_store.get(namespace, "user_instructions")
+        existing_instructions = existing_memory_item.value if existing_memory_item else None
+        if existing_instructions and isinstance(existing_instructions, str):
             existing_instructions = json.loads(existing_instructions) # Si se guardó como JSON
 
-        except json.JSONDecodeError:
-            pass
+
 #####################################################################################################################
 
 
-    # Format the memory in the system prompt
-    system_msg = CREATE_INSTRUCTIONS.format(current_instructions=existing_instructions if existing_instructions else "")
-    new_memory = model.invoke([SystemMessage(content=system_msg)]+state['messages'][:-1] + [HumanMessage(content="Please update the instructions based on the conversation")])
+        # Format the memory in the system prompt
+        system_msg = CREATE_INSTRUCTIONS.format(current_instructions=existing_instructions if existing_instructions else "")
+        new_memory = model.invoke([SystemMessage(content=system_msg)]+state['messages'][:-1] + [HumanMessage(content="Please update the instructions based on the conversation")])
 
 
 ###########################################################################################################
 
-    # Overwrite the existing memory in the store 
-    key = "user_instructions"
-    store.put(namespace, key, new_memory.content)
+        # Overwrite the existing memory in the store 
+        key = "user_instructions"
+        active_store.put(namespace, key, new_memory.content)
 
 #########################################################################################################
 
@@ -456,7 +467,7 @@ REDIS_URI = os.getenv("REDIS_URI")
 ## Crear el checkpointer (en memoria, sin contexto)
 # checkpointer = MemorySaver()
 ############################################################################################
-# redis_store=None 
+#redis_store=None 
 # with RedisStore.from_conn_string(REDIS_URI) as store:
 #     store.setup()
 #     redis_store = store
@@ -480,73 +491,37 @@ REDIS_URI = os.getenv("REDIS_URI")
 # # Compilar el grafo sin usar with para objetos que no son context manager
 # graph = builder.compile(checkpointer=checkpointer, store=store)
 
-# def create_graph():
-#     """Create and return the compiled graph with Redis store and checkpointer"""
+def create_graph():
+    """Create and return the compiled graph with Redis store and checkpointer"""
     
-#     # Create store using context manager pattern
-#     store_context = RedisStore.from_conn_string(REDIS_URI)
-#     checkpointer_context = RedisSaver.from_conn_string(REDIS_URI)
+    # Create store using context manager pattern
+    store_context = RedisStore.from_conn_string(REDIS_URI)
+    checkpointer_context = RedisSaver.from_conn_string(REDIS_URI)
     
-#     # Get the actual store and checkpointer objects
-#     with store_context as redis_store:
-#         redis_store.setup()
-#         with checkpointer_context as checkpointer:
-#             checkpointer.setup()
-#             # Compile and return the graph
-#             return builder.compile(checkpointer=checkpointer, store=redis_store)
+    # Get the actual store and checkpointer objects
+    with store_context as redis_store:
+        redis_store.setup()
+        with checkpointer_context as checkpointer:
+            checkpointer.setup()
+            # Compile and return the graph
+            return builder.compile(checkpointer=checkpointer, store=redis_store)
 
 
-# graph = create_graph()
-
-############################################################################################3
-# Initialize Redis store and checkpointer
-redis_store = None
-checkpointer = None
-
-# Initialize store
-store_manager = RedisStore.from_conn_string(REDIS_URI)
-redis_store = store_manager.__enter__()
-redis_store.setup()
-
-# Initialize checkpointer  
-cp_manager = RedisSaver.from_conn_string(REDIS_URI)
-checkpointer = cp_manager.__enter__()
-checkpointer.setup()
-
-# Compile the graph
-graph = builder.compile(checkpointer=checkpointer, store=redis_store)
-
-
+graph = create_graph()
 #%%
-__all__ = ["graph"]
+#__all__ = ["graph"]
 ########################################################################################
 # config = {"configurable": {"thread_id": "1", "user_id": "1"}}
 # input_message = {"role": "user", "content": "Hi! Remember: my name is Bob"}
 # for chunk in graph.stream({"messages": [input_message]}, config, stream_mode="values"):
 #     chunk["messages"][-1].pretty_print()
-# if __name__ == "__main__":
-# # Test the graph
-#     import configuration
 
-#     # Asegurar que configuration.Configuration tenga todo_category y task_maistro_role
-#     # Si no están definidos, agregar valores por defecto
-#     config = {
-#         "configurable": {
-#             "thread_id": "1", 
-#             "user_id": "1",
-#             "todo_category": "general",  # Valor por defecto
-#             "task_maistro_role": "You are a helpful AI assistant that manages tasks and user profiles."  # Valor por defecto
-#         }
-#     }
+# Test the graph
+if __name__ == "__main__":
+    config = {"configurable": {"thread_id": "1", "user_id": "1"}}
+    input_message = {"role": "user", "content": "Hi! Remember: my name is Bob"}
+    for chunk in graph.stream({"messages": [input_message]}, config, stream_mode="values"):
+        chunk["messages"][-1].pretty_print()
 
-#     input_message = {"role": "user", "content": "Hi! Remember: my name is Bob"}
-
-#     try:
-#         for chunk in graph.stream({"messages": [input_message]}, config, stream_mode="values"):
-#             chunk["messages"][-1].pretty_print()
-#     except Exception as e:
-#         print(f"Error executing graph: {e}")
-#         import traceback
-#         traceback.print_exc()
 
 # %%
