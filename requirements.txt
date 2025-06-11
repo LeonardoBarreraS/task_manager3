@@ -8,6 +8,7 @@ langgraph==0.4.7
 langgraph-prebuilt
 langgraph-sdk
 langgraph-checkpoint-redis
+langgraph-checkpoint-sqlite
 redis>=6.0.0
 trustcall==0.0.20
 pydantic==2.9.2
