@@ -7,8 +7,8 @@
 import uuid
 import os
 from datetime import datetime
-import psycopg2
-import psycopg2.pool # Necesario para el ConnectionPool
+import json
+
 
 # Core imports with error handling
 from pydantic import BaseModel, Field
@@ -22,12 +22,11 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.store.memory import InMemoryStore
 
 
-# SOLO el Store PostgreSQL (NO checkpointer PostgreSQL)
-try:
-    from langgraph.checkpoint.postgres import PostgresSaver as PostgresStore # Renombrado para tu uso
-except ImportError:
-    PostgresStore = None
-    print("⚠️ PostgresStore import failed - will use fallback")
+
+from langgraph.checkpoint.redis import RedisCheckpoint
+from langgraph.store.redis import RedisStore
+
+
 
 
 from langgraph.graph import StateGraph, MessagesState, START, END
@@ -82,6 +81,8 @@ class UpdateMemory(TypedDict):
 def get_model():
     """Get ChatOpenAI model with proper error handling and Railway-specific timeouts"""
     openai_key = os.getenv("OPENAI_API_KEY")
+    if not openai_key:
+        print("Warning: OPENAI_API_KEY is not set. OpenAI calls may fail.")
     # Railway-specific configuration with timeouts to prevent hanging
     return ChatOpenAI(
         model="gpt-4o-mini", 
@@ -163,6 +164,8 @@ Your current instructions are:
 {current_instructions}
 </current_instructions>"""
 
+
+#########################################################################################################################################
 ## Node definitions
 
 def task_mAIstro(state: MessagesState, config: RunnableConfig, store: BaseStore):
@@ -179,30 +182,52 @@ def task_mAIstro(state: MessagesState, config: RunnableConfig, store: BaseStore)
     todo = ""
     instructions = ""
 
+#############################################################################
     # Usar 'store' dentro de un 'with' block para acceder a los métodos
     with store as active_store:
    # Retrieve profile memory from the store
         namespace = ("profile", todo_category, user_id)
         memories = active_store.search(namespace)
+
         if memories:
-            user_profile = memories[0].value
+            profile_data = memories[0].value
+            if isinstance(profile_data, str): # Si se serializó como cadena, deserealizar
+                profile_data = json.loads(profile_data)
+            user_profile = Profile.model_validate(profile_data).model_dump_json(indent=2)
         else:
             user_profile = None
+##################################################################################
 
         # Retrieve people memory from the store
         namespace = ("todo", todo_category, user_id)
         memories = active_store.search(namespace)
-        todo = "\n".join(f"{mem.value}" for mem in memories)    # Retrieve custom instructions
+    
+
+        todo_list_formatted = []
+        if memories:
+            for mem in memories:
+                todo_data = mem.value
+                if isinstance(todo_data, str):
+                    todo_data = json.loads(todo_data)
+                todo_list_formatted.append(json.dumps(todo_data))
+        todo = "\n".join(todo_list_formatted)
+
+##################################################################################
+
+          # Retrieve custom instructions
         namespace = ("instructions", todo_category, user_id)
         memories = active_store.search(namespace)
         if memories:
-            instructions = memories[0].value
+            instructions_data = memories[0].value
+            if isinstance(instructions_data, str):
+                # Las instrucciones pueden ser una cadena simple
+                instructions = instructions_data
+            else: # Si se guardó como JSON, convertir a cadena.
+                instructions = json.dumps(instructions_data)
         else:
             instructions = ""
-    
 
-
-
+##############################################################################
 
     system_msg = MODEL_SYSTEM_MESSAGE.format(task_maistro_role=task_maistro_role, user_profile=user_profile, todo=todo, instructions=instructions)
 
@@ -210,6 +235,11 @@ def task_mAIstro(state: MessagesState, config: RunnableConfig, store: BaseStore)
     response = model.bind_tools([UpdateMemory], parallel_tool_calls=False).invoke([SystemMessage(content=system_msg)]+state["messages"])
 
     return {"messages": [response]}
+
+
+
+
+########################################################################################################################################
 
 def update_profile(state: MessagesState, config: RunnableConfig, store: BaseStore):
 
@@ -219,9 +249,11 @@ def update_profile(state: MessagesState, config: RunnableConfig, store: BaseStor
     configurable = configuration.Configuration.from_runnable_config(config)
     user_id = configurable.user_id
     todo_category = configurable.todo_category
-
     # Define the namespace for the memories
     namespace = ("profile", todo_category, user_id)
+
+######################################################################
+ 
 
     with store as active_store:
 
@@ -230,28 +262,31 @@ def update_profile(state: MessagesState, config: RunnableConfig, store: BaseStor
 
         # Format the existing memories for the Trustcall extractor
         tool_name = "Profile"
-        existing_memories = ([(existing_item.key, tool_name, existing_item.value)
+        existing_memories = ([(existing_item.key, tool_name, json.loads(existing_item.value) if isinstance(existing_item.value, str) else existing_item.value)
                             for existing_item in existing_items]
                             if existing_items
                             else None
                             )
 
+################################################################################
         # Merge the chat history and the instruction
         TRUSTCALL_INSTRUCTION_FORMATTED=TRUSTCALL_INSTRUCTION.format(time=datetime.now().isoformat())
         updated_messages=list(merge_message_runs(messages=[SystemMessage(content=TRUSTCALL_INSTRUCTION_FORMATTED)] + state["messages"][:-1]))    # Invoke the extractor
         result = profile_extractor.invoke({"messages": updated_messages, 
                                             "existing": existing_memories})
 
+##################################################################################
+
         # Save save the memories from Trustcall to the store
         for r, rmeta in zip(result["responses"], result["response_metadata"]):
-            active_store.put(namespace,
-                    rmeta.get("json_doc_id", str(uuid.uuid4())),
-                    r.model_dump(mode="json"),
-                )
-            
+            active_store.put(namespace, user_id, r.model_dump(mode="json"))
+
+
     tool_calls = state['messages'][-1].tool_calls
     # Return tool message with update verification
     return {"messages": [{"role": "tool", "content": "updated profile", "tool_call_id":tool_calls[0]['id']}]}
+
+####################################################################################################################################
 
 def update_todos(state: MessagesState, config: RunnableConfig, store: BaseStore):
 
@@ -265,6 +300,9 @@ def update_todos(state: MessagesState, config: RunnableConfig, store: BaseStore)
     # Define the namespace for the memories
     namespace = ("todo", todo_category, user_id)
 
+
+##################################################################################
+
     with store as active_store:
 
         # Retrieve the most recent memories for context
@@ -272,12 +310,13 @@ def update_todos(state: MessagesState, config: RunnableConfig, store: BaseStore)
 
         # Format the existing memories for the Trustcall extractor
         tool_name = "ToDo"
-        existing_memories = ([(existing_item.key, tool_name, existing_item.value)
+        existing_memories = ([(existing_item.key, tool_name, json.loads(existing_item.value) if isinstance(existing_item.value, str) else existing_item.value)
                             for existing_item in existing_items]
                             if existing_items
                             else None
                             )
-
+        
+##################################################################################
         # Merge the chat history and the instruction
         TRUSTCALL_INSTRUCTION_FORMATTED=TRUSTCALL_INSTRUCTION.format(time=datetime.now().isoformat())
         updated_messages=list(merge_message_runs(messages=[SystemMessage(content=TRUSTCALL_INSTRUCTION_FORMATTED)] + state["messages"][:-1]))
@@ -294,13 +333,16 @@ def update_todos(state: MessagesState, config: RunnableConfig, store: BaseStore)
         result = todo_extractor.invoke({"messages": updated_messages, 
                                             "existing": existing_memories})
 
+
+############################################################################################
+
         # Save save the memories from Trustcall to the store
         for r, rmeta in zip(result["responses"], result["response_metadata"]):
-            active_store.put(namespace,
-                    rmeta.get("json_doc_id", str(uuid.uuid4())),
-                    r.model_dump(mode="json"),
-                )
-        
+            todo_id = rmeta.get("json_doc_id", str(uuid.uuid4()))
+            active_store.put(namespace, todo_id, r.model_dump(mode="json")) 
+
+    ################################################################################################# 
+
     # Respond to the tool call made in task_mAIstro, confirming the update    
     tool_calls = state['messages'][-1].tool_calls
 
@@ -308,6 +350,7 @@ def update_todos(state: MessagesState, config: RunnableConfig, store: BaseStore)
     todo_update_msg = "Updated ToDo list:\n"
     return {"messages": [{"role": "tool", "content": todo_update_msg, "tool_call_id":tool_calls[0]['id']}]}
 
+#########################################################################################################################################
 def update_instructions(state: MessagesState, config: RunnableConfig, store: BaseStore):
 
     """Reflect on the chat history and update the memory collection."""
@@ -319,22 +362,38 @@ def update_instructions(state: MessagesState, config: RunnableConfig, store: Bas
     
     namespace = ("instructions", todo_category, user_id)
 
+############################################################################################################3
+
     with store as active_store:
 
-        existing_memory = active_store.get(namespace, "user_instructions")
-            # Format the memory in the system prompt
-        system_msg = CREATE_INSTRUCTIONS.format(current_instructions=existing_memory.value if existing_memory else None)
+        existing_memory_item = active_store.get(namespace, "user_instructions")
+        existing_instructions = existing_memory_item.value if existing_memory_item else None
+        if existing_instructions and isinstance(existing_instructions, str):
+            existing_instructions = json.loads(existing_instructions) # Si se guardó como JSON
+
+
+#####################################################################################################################
+
+
+        # Format the memory in the system prompt
+        system_msg = CREATE_INSTRUCTIONS.format(current_instructions=existing_instructions if existing_instructions else "")
         new_memory = model.invoke([SystemMessage(content=system_msg)]+state['messages'][:-1] + [HumanMessage(content="Please update the instructions based on the conversation")])
+
+
+###########################################################################################################
 
         # Overwrite the existing memory in the store 
         key = "user_instructions"
-        active_store.put(namespace, key, {"memory": new_memory.content})
+        active_store.put(namespace, key, new_memory.content)
 
+#########################################################################################################
 
     tool_calls = state['messages'][-1].tool_calls
     # Return tool message with update verification
     return {"messages": [{"role": "tool", "content": "updated instructions", "tool_call_id":tool_calls[0]['id']}]}
 
+
+###########################################################################################################################################
 # Conditional edge
 def route_message(state: MessagesState, config: RunnableConfig, store: BaseStore):
 
@@ -352,46 +411,35 @@ def route_message(state: MessagesState, config: RunnableConfig, store: BaseStore
             return "update_instructions"
         else:
             raise ValueError
-
+#######################################################################################################################################3
 ## Memory and Store Configuration
 
 def get_checkpointer():
-    """Siempre usa MemorySaver para el checkpointer (estado de conversación temporal)"""
-    return MemorySaver()
+    """Usa RedisCheckpoint para el checkpointer (estado de conversación temporal del grafo)"""
+    redis_url = os.getenv("REDIS_URI") # Usaremos la variable de entorno REDIS_URI
+
+
+    if redis_url:
+        print(f"🔴 Using Redis as checkpointer: {redis_url}")
+        return RedisCheckpoint(url=redis_url)
+    else:
+        print("⚠️ REDIS_URI no está configurado. Usando MemorySaver para checkpointer.")
+        return MemorySaver() # Fallback si no hay Redis URI
+
+##################################################################################################################
 
 def get_store():
-    """Usa Postgres como store persistente si DATABASE_URL está presente, si no, usa InMemoryStore"""
-    postgres_url = os.getenv("DATABASE_URL")
-    if postgres_url and PostgresStore is not None:
-        try:
-            print("🐘 Using PostgreSQL store for persistent data storage")
-            
-            # OP-1: Usar from_conn_string, que devuelve un context manager
-            # Esto es lo que la librería espera para iniciar una sesión con la DB.
-            # Para el setup, lo abriremos y cerraremos.
-            # Para el grafo, el builder.compile lo manejará internamente.
-            
-            # --- PRIMERO: Asegurarse de que las tablas existan con una instancia temporal ---
-            # Se usa el "with" statement para manejar el context manager de from_conn_string.
-            # Esto crea una conexión temporal para el setup y la cierra al salir del "with".
-            with PostgresStore.from_conn_string(postgres_url) as temp_store:
-                temp_store.setup()
-            print("PostgreSQL store tables created/checked successfully.")
+    
+    redis_url = os.getenv("REDIS_URI") # Mismo REDIS_URI que para el checkpointer
 
-            # --- SEGUNDO: Devolver una nueva instancia (o la misma forma) para el grafo ---
-            # La forma más simple y robusta es volver a llamar a from_conn_string,
-            # pero el builder.compile() lo manejará internamente como un context manager.
-            # Aunque devuelve un context manager, langgraph está diseñado para aceptarlo.
-            final_store_instance = PostgresStore.from_conn_string(postgres_url)
-            
-            return final_store_instance
-        except Exception as e:
-            print(f"⚠️ PostgreSQL store failed: {e}")
-            print("💾 Falling back to in-memory store")
-            return InMemoryStore()
+    if redis_url:
+        print(f"📦 Using RedisStore for custom data persistence: {redis_url}")
+        return RedisStore(url=redis_url)
     else:
-        print("💾 Using in-memory store (no DATABASE_URL found or PostgresStore unavailable)")
-        return InMemoryStore()
+        print("⚠️ REDIS_URI no está configurado. Usando InMemoryStore para datos personalizados.")
+        return InMemoryStore() 
+
+#######################################################################################################
 
 # Create the graph + all nodes
 builder = StateGraph(MessagesState, config_schema=configuration.Configuration)

@@ -11,9 +11,11 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1
 WORKDIR /app
 
 # Instala solo dependencias necesarias para Python y Postgres
-RUN apt-get update && apt-get install -y \
-    gcc \
-    libpq-dev \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Por ejemplo, si necesitaras git o curl: \
+    # git \
+    # curl \
+    # Limpia el cache de apt para reducir el tamaño de la imagen
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 

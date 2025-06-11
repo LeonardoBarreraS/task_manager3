@@ -28,6 +28,8 @@ def chat_with_assistant(message, history):
     try:
         # Check if OpenAI API key is available
         openai_key = os.getenv("OPENAI_API_KEY")
+        if not openai_key:
+            return "Error: OPENAI_API_KEY no está configurada. Por favor, configura la variable de entorno."
         
         # Create config with default values
         config = {
@@ -66,8 +68,7 @@ with gr.Blocks(title="Task Maistro Assistant", theme=gr.themes.Soft()) as app:
     Tu asistente personal para gestionar tareas y recordatorios. Comparte tus tareas conmigo y te ayudaré a organizarlas.
     
     **🏗️ Arquitectura:**
-    - 🔴 **Redis**: Estado de conversación (checkpointer)
-    - 🐘 **PostgreSQL**: Datos persistentes (store)  
+    - 🔴 **Redis**: Estado de conversación (checkpointer) y datos persistentes (store)
     - 🧠 **LangGraph**: Motor de inteligencia artificial
     """)
     
