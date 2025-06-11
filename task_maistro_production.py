@@ -463,19 +463,24 @@ REDIS_URI = os.getenv("REDIS_URI")
 ## Crear el checkpointer (en memoria, sin contexto)
 # checkpointer = MemorySaver()
 
-with RedisSaver.from_conn_string(REDIS_URI) as checkpointer:
-    checkpointer.setup()
-    
-    with RedisStore.from_conn_string(REDIS_URI) as store:
-        # NO uses store.setup(), ya no se requiere ni se soporta
-        graph = builder.compile(checkpointer=checkpointer, store=store)
+redis_store=None 
+with RedisStore.from_conn_string(REDIS_URI) as store:
+    store.setup()
+    redis_store = store
+
+checkpointer=None
+with RedisSaver.from_conn_string(REDIS_URI) as cp:
+    cp.setup()
+    checkpointer=cp
+
+
+graph = builder.compile(checkpointer=checkpointer, store=redis_store)
 
 # # Crear el store (Redis), directamente como objeto
 # store = RedisStore.from_conn_string(REDIS_URI) if REDIS_URI else None
 
 # # Compilar el grafo sin usar with para objetos que no son context manager
 # graph = builder.compile(checkpointer=checkpointer, store=store)
-
 
 
 __all__ = ["graph"]
