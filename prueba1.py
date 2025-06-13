@@ -19,12 +19,13 @@ from redis import Redis
 from redis.commands.search.field import TextField
 from redis.commands.search.index_definition import IndexDefinition, IndexType
 from redis.commands.search import Search
+import os
 
 # Conéctate a Redis (ajusta con tu URI y puerto)
 client = Redis(
     host="redis-17150.c261.us-east-1-4.ec2.redns.redis-cloud.com",
     port=17150,
-    password="JS3btoIvwkXz9sI59cLsFsghjEuyEQsT",  # pon aquí tu contraseña real
+    password=os.getenv("REDI_PASS") ,  # pon aquí tu contraseña real
     decode_responses=True
 )
 
